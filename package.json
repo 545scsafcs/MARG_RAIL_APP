@@ -1,0 +1,19 @@
+{
+  "name": "marg-master",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -p \"[{name}]\" -n \"FRONTEND,BACKEND,PYTHON\" -c \"cyan.bold,blue.bold,yellow.bold\" \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run dev:python\"",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:python": "node scripts/run-python.js",
+    "setup": "node scripts/setup.js",
+    "python:setup": "node scripts/setup-python.js",
+    "install:all": "npm install && npm --prefix frontend install && npm --prefix backend install",
+    "start": "npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
