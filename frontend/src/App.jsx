@@ -1121,7 +1121,7 @@ function TaskEvidenceSection({ task, user, userRole: userRoleProp, onRefresh, re
       try {
         const saved = localStorage.getItem('marg_user');
         if (saved) token = JSON.parse(saved).token;
-      } catch {}
+      } catch { }
 
       const response = await fetch(targetUrl, {
         headers: {
@@ -1138,7 +1138,7 @@ function TaskEvidenceSection({ task, user, userRole: userRoleProp, onRefresh, re
 
       setImageBlobUrls(prev => {
         if (prev[evId]) {
-          try { URL.revokeObjectURL(prev[evId]); } catch (_) {}
+          try { URL.revokeObjectURL(prev[evId]); } catch (_) { }
         }
         return { ...prev, [evId]: objectUrl };
       });
@@ -1172,7 +1172,7 @@ function TaskEvidenceSection({ task, user, userRole: userRoleProp, onRefresh, re
     fetchEvidence();
     return () => {
       Object.values(imageBlobUrls).forEach(url => {
-        try { URL.revokeObjectURL(url); } catch (_) {}
+        try { URL.revokeObjectURL(url); } catch (_) { }
       });
     };
   }, [task.task_id]);
@@ -1217,7 +1217,7 @@ function TaskEvidenceSection({ task, user, userRole: userRoleProp, onRefresh, re
       if (res.success) {
         const evId = deleteConfirmEv.evidence_id;
         if (imageBlobUrls[evId]) {
-          try { URL.revokeObjectURL(imageBlobUrls[evId]); } catch (_) {}
+          try { URL.revokeObjectURL(imageBlobUrls[evId]); } catch (_) { }
         }
         setEvidenceList(prev => prev.filter(item => item.evidence_id !== evId));
         setDeleteConfirmEv(null);
@@ -2239,7 +2239,7 @@ function MonthlyPlanView({ userRole, onRefresh }) {
   const [monthlyData, setMonthlyData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
+
   const [selectedDayData, setSelectedDayData] = useState(null);
   const [selectedBlockImpact, setSelectedBlockImpact] = useState(null);
   const [impactLoading, setImpactLoading] = useState(false);
@@ -2336,13 +2336,13 @@ function MonthlyPlanView({ userRole, onRefresh }) {
           <button className="btn-secondary" onClick={handlePrevMonth} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', fontSize: 13 }}>
             <ChevronLeft size={16} /> Prev
           </button>
-          
+
           <button className="btn-secondary" onClick={handleToday} style={{ padding: '6px 12px', fontSize: 13, fontWeight: 600 }}>
             Today
           </button>
 
-          <select 
-            value={month} 
+          <select
+            value={month}
             onChange={(e) => setMonth(parseInt(e.target.value))}
             style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text)', fontWeight: 600, fontSize: 14 }}
           >
@@ -2351,8 +2351,8 @@ function MonthlyPlanView({ userRole, onRefresh }) {
             ))}
           </select>
 
-          <select 
-            value={year} 
+          <select
+            value={year}
             onChange={(e) => setYear(parseInt(e.target.value))}
             style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text)', fontWeight: 600, fontSize: 14 }}
           >
@@ -2500,11 +2500,11 @@ function MonthlyPlanView({ userRole, onRefresh }) {
                       {/* Block Possession Cards List */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         {dayObj.blocks.slice(0, 2).map(blk => (
-                          <div 
+                          <div
                             key={blk.block_id}
-                            style={{ 
-                              padding: '4px 6px', 
-                              borderRadius: 4, 
+                            style={{
+                              padding: '4px 6px',
+                              borderRadius: 4,
                               background: blk.status === 'APPROVED' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
                               borderLeft: `3px solid ${blk.status === 'APPROVED' ? '#10b981' : '#f59e0b'}`,
                               fontSize: 10,
@@ -2591,12 +2591,12 @@ function MonthlyPlanView({ userRole, onRefresh }) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {selectedDayData.blocks.map(blk => (
-                    <div 
-                      key={blk.block_id} 
-                      style={{ 
-                        padding: 12, 
-                        background: 'var(--bg-subtle)', 
-                        borderRadius: 8, 
+                    <div
+                      key={blk.block_id}
+                      style={{
+                        padding: 12,
+                        background: 'var(--bg-subtle)',
+                        borderRadius: 8,
                         borderLeft: `4px solid ${blk.status === 'APPROVED' ? '#10b981' : '#f59e0b'}`,
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -2626,16 +2626,16 @@ function MonthlyPlanView({ userRole, onRefresh }) {
                       {/* Action Buttons */}
                       <div style={{ display: 'flex', gap: 8 }}>
                         {blk.status !== 'APPROVED' && ['ADMIN', 'AUTHORITY', 'CONTROL_OFFICER'].includes(userRole) && (
-                          <button 
-                            className="btn-primary" 
+                          <button
+                            className="btn-primary"
                             onClick={() => handleApproveBlock(blk.block_id)}
                             style={{ padding: '6px 12px', fontSize: 12 }}
                           >
                             Approve Block
                           </button>
                         )}
-                        <button 
-                          className="btn-secondary" 
+                        <button
+                          className="btn-secondary"
                           onClick={() => handleAnalyzeImpact(blk.block_id)}
                           style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
                         >
@@ -2684,10 +2684,10 @@ function MonthlyPlanView({ userRole, onRefresh }) {
                             {tsk.issue || tsk.description}
                           </td>
                           <td style={{ padding: 8 }}>
-                            <span style={{ 
-                              padding: '2px 6px', 
-                              borderRadius: 4, 
-                              fontSize: 10, 
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              fontSize: 10,
                               fontWeight: 700,
                               background: tsk.priority === 'CRITICAL' ? '#ef4444' : tsk.priority === 'HIGH' ? '#f59e0b' : '#3b82f6',
                               color: '#fff'
