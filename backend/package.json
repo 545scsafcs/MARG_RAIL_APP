@@ -11,11 +11,13 @@
     "fresh": "npx kill-port 5000 && node server.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "axios": "^1.6.8",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "multer": "^1.4.5-lts.1",
+    "pg": "^8.23.0",
     "sqlite3": "^5.1.7"
   }
 }

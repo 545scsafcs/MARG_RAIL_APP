@@ -1,0 +1,46 @@
+services:
+  # ----------------------------------------------------
+  # Service 1: MARG Node.js Express Backend API
+  # ----------------------------------------------------
+  - type: web
+    name: marg-express-backend
+    env: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: PYTHON_SERVICE_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: work-evidence
+
+  # ----------------------------------------------------
+  # Service 2: MARG Python OR-Tools Optimization Service
+  # ----------------------------------------------------
+  - type: web
+    name: marg-python-optimizer
+    env: python
+    rootDir: backend/python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.11
+      - key: PORT
+        value: 5001

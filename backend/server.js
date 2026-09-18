@@ -8,6 +8,7 @@ import multer from 'multer';
 
 import fs from 'fs';
 import crypto from 'crypto';
+import { createClient } from '@supabase/supabase-js';
 
 import { initDatabase, dbAll, dbGet, dbRun } from './database/db.js';
 import { authenticateToken, requireRole, generateToken, hashPassword } from './middleware/auth.js';
@@ -19,21 +20,20 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+const SUPABASE_STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'work-evidence';
+const supabase = (SUPABASE_URL && SUPABASE_KEY) ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
 const UPLOADS_DIR = path.resolve(__dirname, '../uploads/work_evidence');
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-const evidenceStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.jpg';
-    const safeExt = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext.toLowerCase()) ? ext.toLowerCase() : '.jpg';
-    cb(null, `ev_${Date.now()}_${crypto.randomBytes(4).toString('hex')}${safeExt}`);
-  }
-});
+// Memory storage for uploads to allow direct push to Supabase Storage or local disk
+const evidenceMemoryStorage = multer.memoryStorage();
 const evidenceUpload = multer({
-  storage: evidenceStorage,
+  storage: evidenceMemoryStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
@@ -45,7 +45,7 @@ const evidenceUpload = multer({
 });
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:5001';
 
 const upload = multer({
@@ -62,11 +62,17 @@ const CORS_ORIGINS = [
   'http://127.0.0.1:3000'
 ];
 
+if (process.env.FRONTEND_URL) {
+  CORS_ORIGINS.push(process.env.FRONTEND_URL.replace(/\/$/, ''));
+}
+
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    if (CORS_ORIGINS.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS: Origin ${origin} not allowed`));
+    if (CORS_ORIGINS.includes(origin) || (process.env.FRONTEND_URL && origin.endsWith('.vercel.app'))) {
+      return callback(null, true);
+    }
+    callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -435,6 +441,7 @@ app.patch('/api/maintenance/:id/work-status', authenticateToken, async (req, res
 });
 
 // Contractor Upload Work Evidence Endpoint
+// Contractor Upload Work Evidence Endpoint (Supabase Storage + Local Fallback)
 app.post('/api/maintenance/:id/evidence', authenticateToken, evidenceUpload.single('file'), async (req, res) => {
   try {
     const taskId = req.params.id;
@@ -452,10 +459,35 @@ app.post('/api/maintenance/:id/evidence', authenticateToken, evidenceUpload.sing
     const userRole = req.user?.role || 'MAINTENANCE_CONTRACTOR';
     const username = req.user?.username || 'maint';
 
-    const fileBuffer = fs.readFileSync(req.file.path);
+    const fileBuffer = req.file.buffer;
     const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
     const evidenceId = `EV-${Date.now()}`;
+    const ext = path.extname(req.file.originalname) || '.jpg';
+    const safeExt = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext.toLowerCase()) ? ext.toLowerCase() : '.jpg';
+    const filename = `ev_${Date.now()}_${crypto.randomBytes(4).toString('hex')}${safeExt}`;
+
+    // Upload to Supabase Storage if configured
+    if (supabase) {
+      const { error: uploadErr } = await supabase.storage
+        .from(SUPABASE_STORAGE_BUCKET)
+        .upload(filename, fileBuffer, {
+          contentType: req.file.mimetype || 'image/jpeg',
+          upsert: true
+        });
+      if (uploadErr) {
+        console.warn('[Supabase Storage Upload Warning]:', uploadErr.message);
+      }
+    }
+
+    // Always write local backup if directory available
+    const localPath = path.join(UPLOADS_DIR, filename);
+    try {
+      fs.writeFileSync(localPath, fileBuffer);
+    } catch (fsErr) {
+      console.warn('[Local Storage Warning]:', fsErr.message);
+    }
+
     const validCategory = ['BEFORE', 'DURING', 'AFTER'].includes((category || '').toUpperCase()) ? category.toUpperCase() : 'DURING';
     const progress = parseInt(progress_percentage) || task.work_progress || 50;
     const timestamp = new Date().toISOString();
@@ -473,7 +505,7 @@ app.post('/api/maintenance/:id/evidence', authenticateToken, evidenceUpload.sing
         username,
         userRole,
         validCategory,
-        req.file.filename,
+        filename,
         req.file.originalname,
         req.file.mimetype,
         req.file.size,
@@ -541,7 +573,7 @@ app.get('/api/work-evidence/task/:taskId', async (req, res) => {
   }
 });
 
-// Serve Work Evidence Image File Endpoint (Dual routes for compatibility)
+// Serve Work Evidence Image File Endpoint (Supabase Storage + Local Stream)
 const serveEvidenceFileHandler = async (req, res) => {
   try {
     const evidenceId = req.params.evidenceId || req.params.id;
@@ -549,6 +581,20 @@ const serveEvidenceFileHandler = async (req, res) => {
     if (!item) {
       return res.status(404).send('Evidence record not found.');
     }
+
+    // Try fetching from Supabase Storage first
+    if (supabase) {
+      const { data, error } = await supabase.storage.from(SUPABASE_STORAGE_BUCKET).download(item.file_path);
+      if (!error && data) {
+        const arrayBuffer = await data.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        res.setHeader('Content-Type', item.mime_type || 'image/png');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.send(buffer);
+      }
+    }
+
+    // Fallback to local filesystem
     const fullPath = path.join(UPLOADS_DIR, item.file_path);
     if (!fs.existsSync(fullPath)) {
       return res.status(404).send('Physical evidence image file not found.');
@@ -557,6 +603,7 @@ const serveEvidenceFileHandler = async (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=86400');
     fs.createReadStream(fullPath).pipe(res);
   } catch (err) {
+    console.error('[Serve Evidence Image Error]:', err.message);
     res.status(500).send('Error serving evidence image.');
   }
 };
@@ -586,6 +633,11 @@ app.delete('/api/work-evidence/:id', authenticateToken, async (req, res) => {
           message: 'Evidence is locked after submission for Control Officer approval and cannot be deleted.'
         });
       }
+    }
+
+    // Delete from Supabase Storage if configured
+    if (supabase) {
+      await supabase.storage.from(SUPABASE_STORAGE_BUCKET).remove([item.file_path]).catch(() => {});
     }
 
     // Delete physical file from uploads directory safely
@@ -1271,9 +1323,10 @@ app.use((err, req, res, next) => {
 });
 
 // Server Startup
-const HOST = '127.0.0.1';
+const HOST = '0.0.0.0';
 const server = app.listen(Number(PORT), HOST, async () => {
   const isGroqConfigured = Boolean(process.env.GROQ_API_KEY && !process.env.GROQ_API_KEY.includes('YOUR_'));
+  const dbType = process.env.DATABASE_URL ? 'Connected (Supabase PostgreSQL)' : 'Connected (SQLite)';
 
   let pyStatus = 'Unavailable';
   try {
@@ -1284,7 +1337,7 @@ const server = app.listen(Number(PORT), HOST, async () => {
   console.log('\n=======================================');
   console.log('MARG Backend');
   console.log(`URL:              http://${HOST}:${PORT}`);
-  console.log(`Database:         Connected (SQLite)`);
+  console.log(`Database:         ${dbType}`);
   console.log(`Python Optimizer: ${pyStatus}`);
   console.log(`Groq AI:          ${isGroqConfigured ? 'Configured' : 'Not Configured'}`);
   console.log('=======================================\n');
