@@ -46,7 +46,7 @@ const evidenceUpload = multer({
 
 const app = express();
 const PORT = process.env.PORT || 10000;
-const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:5001';
+const PYTHON_SERVICE_URL = (process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:5001').replace(/\/+$/, '');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -866,6 +866,11 @@ app.get('/api/blocks', async (req, res) => {
 });
 
 app.post('/api/blocks/optimize', authenticateToken, requireRole(['ADMIN', 'AUTHORITY', 'CONTROL_OFFICER']), async (req, res) => {
+  const username = req.user?.username || 'anonymous';
+  const role = req.user?.role || 'unknown';
+  console.log(`[Optimizer Request] Received /api/blocks/optimize from user: '${username}', role: '${role}'`);
+  console.log(`[Optimizer Request] Target Python URL: ${PYTHON_SERVICE_URL}/optimize`);
+
   try {
     const tasks = await dbAll(`SELECT * FROM maintenance_tasks WHERE status != 'COMPLETED'`);
     const trains = await dbAll(`SELECT * FROM trains`);
@@ -875,16 +880,22 @@ app.post('/api/blocks/optimize', authenticateToken, requireRole(['ADMIN', 'AUTHO
 
     try {
       const pyRes = await axios.post(`${PYTHON_SERVICE_URL}/optimize`, payload, { timeout: 6000 });
+      console.log(`[Optimizer Request] Python HTTP status: ${pyRes.status}, response success: ${pyRes.data?.success}`);
       if (pyRes.data && pyRes.data.success) {
         const runId = `RUN-${Date.now()}`;
         const result = { run_id: runId, ...pyRes.data };
         await dbRun(`INSERT INTO optimization_runs (run_id, created_at, result_json) VALUES (?, ?, ?)`, [runId, new Date().toISOString(), JSON.stringify(result)]);
+        console.log(`[Optimizer Request] Result: Successfully solved via Python OR-Tools (run_id: ${runId})`);
         return res.json(result);
+      } else {
+        console.warn(`[Optimizer Request] Python solver returned non-success response payload:`, pyRes.data);
       }
     } catch (pyErr) {
-      console.warn('[Backend] Python solver offline, computing Node CP-SAT algorithm fallback:', pyErr.message);
+      const httpStatus = pyErr.response ? pyErr.response.status : 'N/A';
+      console.warn(`[Optimizer Request] Python solver unreachable or error (HTTP status: ${httpStatus}): ${pyErr.message}`);
     }
 
+    console.log(`[Optimizer Request] Executing Node CP-SAT algorithm fallback...`);
     const runId = `RUN-NODE-${Date.now()}`;
     const result = {
       run_id: runId,
@@ -901,9 +912,10 @@ app.post('/api/blocks/optimize', authenticateToken, requireRole(['ADMIN', 'AUTHO
     };
 
     await dbRun(`INSERT INTO optimization_runs (run_id, created_at, result_json) VALUES (?, ?, ?)`, [runId, new Date().toISOString(), JSON.stringify(result)]);
+    console.log(`[Optimizer Request] Result: Solved via Node fallback (run_id: ${runId})`);
     res.json(result);
   } catch (err) {
-    console.error('[API /blocks/optimize] Error:', err.message);
+    console.error('[Optimizer Request] Error:', err.message);
     res.status(500).json({ error: 'Block optimization failed' });
   }
 });

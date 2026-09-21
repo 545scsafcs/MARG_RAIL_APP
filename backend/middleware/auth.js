@@ -52,6 +52,7 @@ export function authenticateToken(req, res, next) {
 
   const decoded = verifyToken(token);
   if (!decoded) {
+    console.warn('[Auth] Rejected request: Invalid or expired authorization token.');
     return res.status(401).json({ success: false, message: 'Invalid or expired authorization token.' });
   }
 

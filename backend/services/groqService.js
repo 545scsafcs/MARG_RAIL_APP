@@ -171,7 +171,7 @@ export const agentTools = {
   },
 
   async run_marg_optimization() {
-    const pyUrl = process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:5001';
+    const pyUrl = (process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:5001').replace(/\/+$/, '');
     const tasks = await dbAll(`SELECT * FROM maintenance_tasks WHERE status != 'COMPLETED'`);
     const trains = await dbAll(`SELECT * FROM trains`);
     const crews = await dbAll(`SELECT * FROM crews`);
